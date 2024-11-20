@@ -1,5 +1,5 @@
 [package]
-name = "template"
+name = "concurrency"
 version = "0.1.0"
 authors = ["Hey <author@example.com>"]
 edition = "2021"
