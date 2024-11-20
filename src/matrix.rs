@@ -5,6 +5,8 @@ use std::{
 
 use anyhow::Result;
 
+use crate::vector::Vector;
+
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Matrix<T>
@@ -51,6 +53,23 @@ where
         }
         Ok(())
     }
+}
+
+#[allow(dead_code)]
+fn dot_product<T>(a: Vector<T>, b: Vector<T>) -> Result<T>
+where
+    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
+{
+    if a.len() != b.len() {
+        return Err(anyhow::anyhow!("Vector dimensions mismatch"));
+    }
+
+    let mut sum = T::default();
+    for i in 0..a.len() {
+        sum += a[i] * b[i];
+    }
+
+    Ok(sum)
 }
 
 #[allow(dead_code)]
