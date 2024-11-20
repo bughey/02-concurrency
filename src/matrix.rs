@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::Result;
 
-use crate::vector::Vector;
+use crate::vector::{dot_product, Vector};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -38,6 +38,25 @@ where
             col,
         }
     }
+
+    // 获取第n行数据，返回Vector
+    pub fn row(&self, n: usize) -> Vector<T> {
+        Vector::new(&self.data[n * self.col..n * self.col + self.col])
+    }
+
+    // 获取第n列数据，返回Vector， 使用iterator实现
+    pub fn col(&self, n: usize) -> Vector<T> {
+        Vector::new(
+            /* (0..self.row)
+            .map(|i| self.data[i * self.col + n])
+            .collect::<Vec<T>>(), */
+            self.data[n..]
+                .iter()
+                .step_by(self.col)
+                .copied()
+                .collect::<Vec<T>>(),
+        )
+    }
 }
 
 impl<T> Display for Matrix<T>
@@ -56,23 +75,6 @@ where
 }
 
 #[allow(dead_code)]
-fn dot_product<T>(a: Vector<T>, b: Vector<T>) -> Result<T>
-where
-    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
-{
-    if a.len() != b.len() {
-        return Err(anyhow::anyhow!("Vector dimensions mismatch"));
-    }
-
-    let mut sum = T::default();
-    for i in 0..a.len() {
-        sum += a[i] * b[i];
-    }
-
-    Ok(sum)
-}
-
-#[allow(dead_code)]
 pub fn multiply<T>(a: &Matrix<T>, b: &Matrix<T>) -> Result<Matrix<T>>
 where
     T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
@@ -85,11 +87,16 @@ where
 
     for i in 0..a.row {
         for j in 0..b.col {
-            let mut sum = T::default();
+            /* let mut sum = T::default();
             for k in 0..a.col {
                 sum += a.data[i * a.col + k] * b.data[k * b.col + j];
             }
-            result.data[i * result.col + j] = sum;
+            result.data[i * result.col + j] = sum; */
+
+            // use dot_product
+            let row = a.row(i);
+            let col = b.col(j);
+            result.data[i * result.col + j] = dot_product(row, col)?;
         }
     }
 
