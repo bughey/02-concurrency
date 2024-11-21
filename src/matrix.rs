@@ -74,6 +74,17 @@ where
     }
 }
 
+impl<T> Mul for Matrix<T>
+where
+    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
+{
+    type Output = Matrix<T>;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        multiply(&self, &rhs).expect("Matrix multiply error")
+    }
+}
+
 #[allow(dead_code)]
 pub fn multiply<T>(a: &Matrix<T>, b: &Matrix<T>) -> Result<Matrix<T>>
 where
@@ -111,7 +122,7 @@ mod tests {
     fn test_multiply() {
         let m1 = Matrix::from_data(vec![1; 4], 2, 2);
         let m2 = Matrix::from_data(vec![2; 4], 2, 2);
-        let result = multiply(&m1, &m2).unwrap();
+        let result = m1 * m2;
         println!("{}", result);
     }
 }
