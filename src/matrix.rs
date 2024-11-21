@@ -1,11 +1,15 @@
 use std::{
     fmt::{Debug, Display},
     ops::{Add, AddAssign, Mul},
+    sync::mpsc,
 };
 
 use anyhow::Result;
+use oneshot::Sender;
 
 use crate::vector::{dot_product, Vector};
+
+const NUM_PRODUCERS: usize = 4;
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -76,7 +80,7 @@ where
 
 impl<T> Mul for Matrix<T>
 where
-    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
+    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T> + Send + 'static,
 {
     type Output = Matrix<T>;
 
@@ -85,30 +89,73 @@ where
     }
 }
 
+struct MsgInput<T> {
+    idx: usize,
+    row: Vector<T>,
+    col: Vector<T>,
+}
+
+struct MsgOutput<T> {
+    idx: usize,
+    value: T,
+}
+
+struct Msg<T> {
+    sender: Sender<MsgOutput<T>>,
+    input: MsgInput<T>,
+}
+
 #[allow(dead_code)]
 pub fn multiply<T>(a: &Matrix<T>, b: &Matrix<T>) -> Result<Matrix<T>>
 where
-    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T>,
+    T: Debug + Default + Copy + Add<Output = T> + AddAssign + Mul<Output = T> + Send + 'static,
 {
     if a.col != b.row {
         return Err(anyhow::anyhow!("Matrix dimensions mismatch"));
     }
 
+    // 根据NUM_PRODUCERS开启任务线程，返回mpsc::Sender，保存到Vec<Sencer>中
+    let mut senders: Vec<mpsc::Sender<Msg<T>>> = Vec::new();
+    for _ in 0..NUM_PRODUCERS {
+        let (tx, rx) = mpsc::channel();
+        senders.push(tx);
+        std::thread::spawn(move || {
+            for msg in rx {
+                let MsgInput { idx, row, col } = msg.input;
+                let value = dot_product(row, col).unwrap();
+                msg.sender.send(MsgOutput { idx, value }).unwrap();
+            }
+        });
+    }
+
     let mut result = Matrix::new(a.row, b.col);
 
+    let mut receivers: Vec<oneshot::Receiver<MsgOutput<T>>> = Vec::new();
     for i in 0..a.row {
         for j in 0..b.col {
-            /* let mut sum = T::default();
-            for k in 0..a.col {
-                sum += a.data[i * a.col + k] * b.data[k * b.col + j];
-            }
-            result.data[i * result.col + j] = sum; */
-
-            // use dot_product
             let row = a.row(i);
             let col = b.col(j);
-            result.data[i * result.col + j] = dot_product(row, col)?;
+
+            // 从集合中选择Sender发送数据
+            // let sender = senders[i % NUM_PRODUCERS].clone();
+            let (tx, rx) = oneshot::channel();
+            let idx = i * result.col + j;
+            senders[i % NUM_PRODUCERS]
+                .send(Msg {
+                    sender: tx,
+                    input: MsgInput { idx, row, col },
+                })
+                .expect("Send msg input error");
+            receivers.push(rx);
+
+            // result.data[i * result.col + j] = dot_product(row, col)?;
         }
+    }
+
+    // 从Receiver中接收数据，填充到result中
+    for rx in receivers {
+        let MsgOutput { idx, value } = rx.recv()?;
+        result.data[idx] = value;
     }
 
     Ok(result)
